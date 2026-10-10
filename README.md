@@ -1,4 +1,6 @@
-# deepseek-file-vision-demo
+deepseek-file-vision-demo
+
+**在线试验台：https://782042369.github.io/deepseek-file-vision-demo/**
 
 DeepSeek 官方 Files API 最小试验：**上传一次图片 → 拿 `file_id` → 引用 `file_id` 重复识图**。
 

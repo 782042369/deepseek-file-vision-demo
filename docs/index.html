@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek Files API 试验台 · 上传 → file_id → 重复识图</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f6f7f9; color: #1f2328; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 22px; margin: 8px 0 4px; }
+  .sub { color: #57606a; font-size: 13px; margin: 0 0 20px; }
+  .sub a { color: #0969da; }
+  section { background: #fff; border: 1px solid #d0d7de; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  h2 .step { display: inline-block; background: #0969da; color: #fff; border-radius: 6px; padding: 1px 7px; font-size: 12px; margin-right: 6px; }
+  label { display: block; font-size: 12px; color: #57606a; margin: 8px 0 4px; }
+  input[type=text], input[type=password] { width: 100%; padding: 7px 10px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 13px; font-family: ui-monospace, monospace; }
+  button { padding: 6px 14px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; font-size: 13px; }
+  button.primary { background: #1f883d; border-color: #1f883d; color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .fid { font-family: ui-monospace, monospace; font-size: 12px; background: #f6f8fa; border: 1px dashed #d0d7de; border-radius: 6px; padding: 6px 10px; word-break: break-all; }
+  .modes { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; margin-bottom: 8px; }
+  .modes label { display: flex; align-items: center; gap: 4px; margin: 0; color: #1f2328; font-size: 13px; }
+  pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 10px; font-size: 12px; overflow: auto; max-height: 260px; margin: 8px 0 0; }
+  .ans { font-size: 16px; font-weight: 600; color: #1f883d; }
+  .warn { color: #9a6700; background: #fff8c5; border: 1px solid #d4a72c66; padding: 6px 10px; border-radius: 6px; font-size: 12px; display: inline-block; margin-top: 6px; }
+  .ok-tag { color: #1f883d; font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; }
+  img#preview { max-width: 120px; max-height: 120px; border: 1px solid #d0d7de; border-radius: 6px; display: none; }
+  .hint { font-size: 12px; color: #57606a; }
+  #log { font-size: 12px; }
+  #log .line { padding: 3px 0; border-bottom: 1px solid #f0f2f4; font-family: ui-monospace, monospace; }
+  .err { color: #cf222e; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>上传 → file_id → 重复识图</h1>
+  <p class="sub">DeepSeek Files API 在线试验台 · 纯浏览器直连目标 API，本页无后端、密钥不经过第三方 · <a href="https://github.com/782042369/deepseek-file-vision-demo" target="_blank">GitHub 仓库</a> · <a href="https://api-docs.deepseek.com/zh-cn/guides/files_api" target="_blank">Files API 文档</a> · <a href="https://api-docs.deepseek.com/zh-cn/guides/vision" target="_blank">Vision 文档</a></p>
+
+  <section>
+    <h2><span class="step">0</span>接入配置</h2>
+    <div class="row">
+      <div style="flex:2 1 240px"><label>BASE_URL（官方默认；网关填到 /v1，如 https://your-gateway/v1）</label><input type="text" id="baseUrl" value="https://api.deepseek.com"></div>
+      <div style="flex:2 1 240px"><label>API_KEY（仅存在本页内存，刷新即失）</label><input type="password" id="apiKey" placeholder="sk-..."></div>
+      <div style="flex:1 1 120px"><label>MODEL</label><input type="text" id="model" value="deepseek-flash"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="step">1</span>上传图片 → file_id</h2>
+    <div class="row">
+      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp">
+      <button id="genRed">生成红色测试图</button>
+      <button id="upload" class="primary" disabled>上传 POST /files</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <img id="preview" alt="预览">
+      <div class="fid" id="fidBox" style="flex:1">file_id：未上传</div>
+      <button id="copyFid" disabled>复制</button>
+    </div>
+    <pre id="uploadJson">上传结果 JSON 会显示在这里</pre>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span>引用 file_id 重复识图（可无限次提问）</h2>
+    <div class="modes">
+      <label><input type="radio" name="mode" value="file_id" checked>file_id（引用上传）</label>
+      <label><input type="radio" name="mode" value="file_data">file_data（内联 base64）</label>
+      <label><input type="radio" name="mode" value="image_url">image_url（OpenAI 标准）</label>
+    </div>
+    <div class="row">
+      <input type="text" id="question" value="这张图片主要是什么颜色？只回答颜色名" style="flex:1">
+      <button id="ask" class="primary">提问</button>
+    </div>
+    <p style="margin:10px 0 0"><span class="ans" id="answer">回答会显示在这里</span></p>
+    <div id="tokenLine" class="hint" style="margin-top:6px"></div>
+    <pre id="chatJson">对话结果 JSON 会显示在这里</pre>
+  </section>
+
+  <section>
+    <h2>请求日志</h2>
+    <div id="log"></div>
+  </section>
+
+  <section>
+    <h2>实测结论（2026-10）</h2>
+    <table>
+      <tr><th>目标</th><th>/files 上传</th><th>file_id 引用识图</th><th>备注</th></tr>
+      <tr><td>api.deepseek.com 官方直连</td><td class="ok-tag">✅</td><td class="ok-tag">✅ 100%</td><td>本页/本仓库验证</td></tr>
+      <tr><td>new-api 自建网关（官方直连渠道）</td><td>❌ 400（未实现 Files API）</td><td>⚠️ 取决于渠道</td><td>type:file 块可无损透传；渠道配多 key 轮询时文件只归属一个 key，引用成功率 = 1/key数</td></tr>
+      <tr><td>第三方 new-api 站</td><td>❌ 400</td><td>❌ 静默丢弃</td><td>返回 200 但图没进模型（prompt_tokens 仅文本）；只能用 image_url 格式</td></tr>
+    </table>
+    <p class="hint" style="margin-bottom:0">验图技巧：看 prompt_tokens——只有几十说明图没进模型（被网关丢弃），几百起说明图真的被处理了。</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  var state = { file: null, dataUrl: null, fileId: null };
+  var $ = function (id) { return document.getElementById(id); };
+  var logEl = $('log');
+  function log(msg, isErr) {
+    var d = new Date();
+    var t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+    var line = document.createElement('div');
+    line.className = 'line' + (isErr ? ' err' : '');
+    line.textContent = t + '  ' + msg;
+    logEl.insertBefore(line, logEl.firstChild);
+  }
+  function base() { return $('baseUrl').value.trim().replace(/\/+$/, ''); }
+  function authHeaders() { return { 'Authorization': 'Bearer ' + $('apiKey').value.trim() }; }
+  function setFid(fid) {
+    state.fileId = fid;
+    $('fidBox').textContent = 'file_id：' + (fid || '未上传');
+    $('copyFid').disabled = !fid;
+  }
+  function acceptFile(file, dataUrl) {
+    state.file = file;
+    state.dataUrl = dataUrl;
+    setFid(null);
+    $('upload').disabled = !file;
+    var p = $('preview');
+    if (dataUrl) { p.src = dataUrl; p.style.display = 'block'; }
+    log('已选择图片 ' + (file ? file.name + ' (' + file.size + ' bytes)' : ''));
+  }
+  $('fileInput').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () { acceptFile(f, r.result); };
+    r.readAsDataURL(f);
+  });
+  $('genRed').addEventListener('click', function () {
+    var c = document.createElement('canvas');
+    c.width = 100; c.height = 100;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#E80000';
+    ctx.fillRect(0, 0, 100, 100);
+    var dataUrl = c.toDataURL('image/png');
+    var b64 = dataUrl.split(',')[1];
+    var bin = atob(b64);
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    acceptFile(new File([arr], 'red.png', { type: 'image/png' }), dataUrl);
+  });
+  $('upload').addEventListener('click', async function () {
+    if (!state.file) return;
+    if (!$('apiKey').value.trim()) { log('请先填 API_KEY', true); return; }
+    var fd = new FormData();
+    fd.append('purpose', 'user_data');
+    fd.append('file', state.file);
+    log('POST ' + base() + '/files ...');
+    try {
+      var res = await fetch(base() + '/files', { method: 'POST', headers: authHeaders(), body: fd });
+      var j = await res.json();
+      $('uploadJson').textContent = 'HTTP ' + res.status + '\n' + JSON.stringify(j, null, 2);
+      if (res.ok && j.id) { setFid(j.id); log('上传成功 file_id=' + j.id); }
+      else log('上传失败 HTTP ' + res.status + ' ' + (j.error && j.error.message ? j.error.message : ''), true);
+    } catch (err) { log('上传异常 ' + err, true); }
+  });
+  $('copyFid').addEventListener('click', function () {
+    if (state.fileId) { navigator.clipboard.writeText(state.fileId); log('已复制 file_id'); }
+  });
+  $('ask').addEventListener('click', async function () {
+    if (!$('apiKey').value.trim()) { log('请先填 API_KEY', true); return; }
+    var mode = document.querySelector('input[name=mode]:checked').value;
+    var content = [{ type: 'text', text: $('question').value || '描述这张图片' }];
+    if (mode === 'file_id') {
+      if (!state.fileId) { log('file_id 模式需要先上传', true); return; }
+      content.push({ type: 'file', file_id: state.fileId });
+    } else if (mode === 'file_data') {
+      if (!state.dataUrl) { log('请先选择或生成图片', true); return; }
+      content.push({ type: 'file', file_data: state.dataUrl });
+    } else {
+      if (!state.dataUrl) { log('请先选择或生成图片', true); return; }
+      content.push({ type: 'image_url', image_url: { url: state.dataUrl } });
+    }
+    var payload = { model: $('model').value.trim(), messages: [{ role: 'user', content: content }], max_tokens: 300 };
+    log('POST /chat/completions mode=' + mode + ' ...');
+    try {
+      var res = await fetch(base() + '/chat/completions', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: JSON.stringify(payload)
+      });
+      var j = await res.json();
+      var msg = (j.choices && j.choices[0] && j.choices[0].message) || {};
+      var pt = (j.usage && j.usage.prompt_tokens) || 0;
+      $('answer').textContent = msg.content || ('HTTP ' + res.status);
+      var tl = $('tokenLine');
+      tl.textContent = 'prompt_tokens=' + pt;
+      if (pt > 0 && pt < 80) {
+        tl.innerHTML += ' <span class="warn">⚠️ prompt_tokens 偏低：图片可能没进模型（被网关静默丢弃）</span>';
+        log('⚠️ prompt_tokens=' + pt + ' 疑似图片未入模', true);
+      }
+      $('chatJson').textContent = 'HTTP ' + res.status + '\n' + JSON.stringify(j, null, 2);
+      log('回答=' + (msg.content || '(空)') + ' prompt_tokens=' + pt);
+    } catch (err) { log('对话异常 ' + err, true); }
+  });
+})();
+</script>
+</body>
+</html>
